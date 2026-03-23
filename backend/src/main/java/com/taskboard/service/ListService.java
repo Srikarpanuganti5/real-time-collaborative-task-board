@@ -10,11 +10,14 @@ import com.taskboard.repository.BoardListRepository;
 import com.taskboard.repository.BoardMemberRepository;
 import com.taskboard.repository.BoardRepository;
 import com.taskboard.repository.UserRepository;
+import com.taskboard.websocket.BoardEventPublisher;
+import com.taskboard.websocket.BoardEventType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -25,6 +28,7 @@ public class ListService {
     private final BoardRepository boardRepository;
     private final BoardMemberRepository boardMemberRepository;
     private final UserRepository userRepository;
+    private final BoardEventPublisher eventPublisher;
 
     @Transactional
     public ListResponse createList(UUID boardId, ListRequest request, String email) {
@@ -38,15 +42,20 @@ public class ListService {
                 .board(board)
                 .build();
 
-        return toResponse(boardListRepository.save(list));
+        ListResponse response = toResponse(boardListRepository.save(list));
+        eventPublisher.publish(boardId, BoardEventType.LIST_CREATED, response);
+        return response;
     }
 
     @Transactional
     public ListResponse updateList(UUID listId, ListRequest request, String email) {
         BoardList list = findList(listId);
-        assertEditorOrOwner(list.getBoard().getId(), email);
+        UUID boardId = list.getBoard().getId();
+        assertEditorOrOwner(boardId, email);
         list.setTitle(request.getTitle());
-        return toResponse(boardListRepository.save(list));
+        ListResponse response = toResponse(boardListRepository.save(list));
+        eventPublisher.publish(boardId, BoardEventType.LIST_UPDATED, response);
+        return response;
     }
 
     @Transactional
@@ -57,6 +66,7 @@ public class ListService {
         assertEditorOrOwner(boardId, email);
         boardListRepository.delete(list);
         boardListRepository.decrementPositionsAfter(boardId, deletedPosition);
+        eventPublisher.publish(boardId, BoardEventType.LIST_DELETED, Map.of("listId", listId));
     }
 
     @Transactional
@@ -68,8 +78,11 @@ public class ListService {
             list.setPosition(i);
             boardListRepository.save(list);
         }
-        return boardListRepository.findByBoardIdOrderByPositionAsc(request.getBoardId())
+        List<ListResponse> responses = boardListRepository
+                .findByBoardIdOrderByPositionAsc(request.getBoardId())
                 .stream().map(this::toResponse).toList();
+        eventPublisher.publish(request.getBoardId(), BoardEventType.LISTS_REORDERED, responses);
+        return responses;
     }
 
     // --- helpers ---

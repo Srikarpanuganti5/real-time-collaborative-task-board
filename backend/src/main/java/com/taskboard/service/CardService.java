@@ -9,10 +9,13 @@ import com.taskboard.entity.User;
 import com.taskboard.repository.BoardMemberRepository;
 import com.taskboard.repository.CardRepository;
 import com.taskboard.repository.UserRepository;
+import com.taskboard.websocket.BoardEventPublisher;
+import com.taskboard.websocket.BoardEventType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -23,11 +26,13 @@ public class CardService {
     private final BoardMemberRepository boardMemberRepository;
     private final UserRepository userRepository;
     private final ListService listService;
+    private final BoardEventPublisher eventPublisher;
 
     @Transactional
     public CardResponse createCard(UUID listId, CardRequest request, String email) {
         BoardList list = listService.findList(listId);
-        assertEditorOrOwner(list.getBoard().getId(), email);
+        UUID boardId = list.getBoard().getId();
+        assertEditorOrOwner(boardId, email);
 
         int nextPosition = cardRepository.findMaxPositionByListId(listId) + 1;
 
@@ -45,7 +50,9 @@ public class CardService {
                 .dueDate(request.getDueDate())
                 .build();
 
-        return toResponse(cardRepository.save(card));
+        CardResponse response = toResponse(cardRepository.save(card));
+        eventPublisher.publish(boardId, BoardEventType.CARD_CREATED, response);
+        return response;
     }
 
     public CardResponse getCard(UUID cardId, String email) {
@@ -57,7 +64,8 @@ public class CardService {
     @Transactional
     public CardResponse updateCard(UUID cardId, CardRequest request, String email) {
         Card card = findCard(cardId);
-        assertEditorOrOwner(card.getBoardList().getBoard().getId(), email);
+        UUID boardId = card.getBoardList().getBoard().getId();
+        assertEditorOrOwner(boardId, email);
 
         card.setTitle(request.getTitle());
         card.setDescription(request.getDescription());
@@ -70,24 +78,28 @@ public class CardService {
             card.setAssignee(null);
         }
 
-        return toResponse(cardRepository.save(card));
+        CardResponse response = toResponse(cardRepository.save(card));
+        eventPublisher.publish(boardId, BoardEventType.CARD_UPDATED, response);
+        return response;
     }
 
     @Transactional
     public void deleteCard(UUID cardId, String email) {
         Card card = findCard(cardId);
         UUID listId = card.getBoardList().getId();
+        UUID boardId = card.getBoardList().getBoard().getId();
         int deletedPosition = card.getPosition();
-        assertEditorOrOwner(card.getBoardList().getBoard().getId(), email);
+        assertEditorOrOwner(boardId, email);
         cardRepository.delete(card);
         cardRepository.decrementPositionsAfter(listId, deletedPosition);
+        eventPublisher.publish(boardId, BoardEventType.CARD_DELETED, Map.of("cardId", cardId, "listId", listId));
     }
 
     @Transactional
     public CardResponse moveCard(UUID cardId, MoveCardRequest request, String email) {
         Card card = findCard(cardId);
-        UUID sourceBoardId = card.getBoardList().getBoard().getId();
-        assertEditorOrOwner(sourceBoardId, email);
+        UUID boardId = card.getBoardList().getBoard().getId();
+        assertEditorOrOwner(boardId, email);
 
         UUID sourceListId = card.getBoardList().getId();
         int sourcePosition = card.getPosition();
@@ -96,17 +108,15 @@ public class CardService {
 
         BoardList targetList = listService.findList(targetListId);
 
-        // Remove from source
         cardRepository.decrementPositionsAfter(sourceListId, sourcePosition);
-
-        // Make room in target
         cardRepository.incrementPositionsFrom(targetListId, targetPosition);
 
-        // Move card
         card.setBoardList(targetList);
         card.setPosition(targetPosition);
 
-        return toResponse(cardRepository.save(card));
+        CardResponse response = toResponse(cardRepository.save(card));
+        eventPublisher.publish(boardId, BoardEventType.CARD_MOVED, response);
+        return response;
     }
 
     // --- helpers ---

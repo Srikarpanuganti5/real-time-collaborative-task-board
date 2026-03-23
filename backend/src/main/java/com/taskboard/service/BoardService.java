@@ -13,11 +13,14 @@ import com.taskboard.repository.BoardListRepository;
 import com.taskboard.repository.BoardMemberRepository;
 import com.taskboard.repository.BoardRepository;
 import com.taskboard.repository.UserRepository;
+import com.taskboard.websocket.BoardEventPublisher;
+import com.taskboard.websocket.BoardEventType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -29,6 +32,7 @@ public class BoardService {
     private final UserRepository userRepository;
     private final BoardListRepository boardListRepository;
     private final ListService listService;
+    private final BoardEventPublisher eventPublisher;
 
     public List<BoardResponse> getMyBoards(String email) {
         User user = findUserByEmail(email);
@@ -98,7 +102,10 @@ public class BoardService {
                 .build();
         boardMemberRepository.save(member);
 
-        return toResponse(boardRepository.findById(boardId).orElseThrow());
+        BoardResponse response = toResponse(boardRepository.findById(boardId).orElseThrow());
+        eventPublisher.publish(boardId, BoardEventType.MEMBER_ADDED,
+                Map.of("userId", newMember.getId(), "username", newMember.getUsername(), "role", request.getRole()));
+        return response;
     }
 
     @Transactional
@@ -112,6 +119,7 @@ public class BoardService {
         }
 
         boardMemberRepository.deleteByBoardIdAndUserId(boardId, userId);
+        eventPublisher.publish(boardId, BoardEventType.MEMBER_REMOVED, Map.of("userId", userId));
     }
 
     // --- helpers ---
