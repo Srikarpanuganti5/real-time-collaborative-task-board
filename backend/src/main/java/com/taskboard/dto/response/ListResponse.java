@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,13 +12,10 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BoardResponse {
+public class ListResponse {
     private UUID id;
     private String title;
-    private String description;
-    private UUID ownerId;
-    private String ownerUsername;
-    private List<BoardMemberResponse> members;
-    private List<ListResponse> lists;
-    private LocalDateTime createdAt;
+    private Integer position;
+    private UUID boardId;
+    private List<CardResponse> cards;
 }

@@ -5,21 +5,22 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BoardResponse {
+public class CardResponse {
     private UUID id;
     private String title;
     private String description;
-    private UUID ownerId;
-    private String ownerUsername;
-    private List<BoardMemberResponse> members;
-    private List<ListResponse> lists;
+    private Integer position;
+    private UUID listId;
+    private UUID assigneeId;
+    private String assigneeUsername;
+    private LocalDate dueDate;
     private LocalDateTime createdAt;
 }

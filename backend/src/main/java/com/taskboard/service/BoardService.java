@@ -4,10 +4,12 @@ import com.taskboard.dto.request.AddMemberRequest;
 import com.taskboard.dto.request.BoardRequest;
 import com.taskboard.dto.response.BoardMemberResponse;
 import com.taskboard.dto.response.BoardResponse;
+import com.taskboard.dto.response.ListResponse;
 import com.taskboard.entity.Board;
 import com.taskboard.entity.BoardMember;
 import com.taskboard.entity.BoardRole;
 import com.taskboard.entity.User;
+import com.taskboard.repository.BoardListRepository;
 import com.taskboard.repository.BoardMemberRepository;
 import com.taskboard.repository.BoardRepository;
 import com.taskboard.repository.UserRepository;
@@ -25,6 +27,8 @@ public class BoardService {
     private final BoardRepository boardRepository;
     private final BoardMemberRepository boardMemberRepository;
     private final UserRepository userRepository;
+    private final BoardListRepository boardListRepository;
+    private final ListService listService;
 
     public List<BoardResponse> getMyBoards(String email) {
         User user = findUserByEmail(email);
@@ -160,6 +164,10 @@ public class BoardService {
                         .build())
                 .toList();
 
+        List<ListResponse> lists = boardListRepository
+                .findByBoardIdOrderByPositionAsc(board.getId())
+                .stream().map(listService::toResponse).toList();
+
         return BoardResponse.builder()
                 .id(board.getId())
                 .title(board.getTitle())
@@ -167,6 +175,7 @@ public class BoardService {
                 .ownerId(board.getOwner().getId())
                 .ownerUsername(board.getOwner().getUsername())
                 .members(members)
+                .lists(lists)
                 .createdAt(board.getCreatedAt())
                 .build();
     }
