@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DragDropContext, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { getBoard } from '../api/boards';
 import { createList } from '../api/lists';
 import { moveCard } from '../api/cards';
-import type { Board, ListItem, CardItem } from '../types';
+import type { Board, ListItem, CardItem, BoardEvent } from '../types';
 import ListColumn from '../components/list/ListColumn';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { handleBoardEvent } from '../hooks/useBoardEvents';
 
 export default function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
@@ -28,6 +30,13 @@ export default function BoardPage() {
       .catch(() => navigate('/boards'))
       .finally(() => setLoading(false));
   }, [boardId, navigate]);
+
+  // WebSocket — receive live updates from other collaborators
+  const onEvent = useCallback((event: BoardEvent) => {
+    handleBoardEvent(event, setLists);
+  }, []);
+
+  useWebSocket({ boardId: boardId ?? '', onEvent, enabled: !loading && !!boardId });
 
   const handleAddList = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -134,6 +143,11 @@ export default function BoardPage() {
           </svg>
         </button>
         <h1 className="text-lg font-bold">{board.title}</h1>
+        {/* Live indicator */}
+        <span className="flex items-center gap-1.5 text-xs text-emerald-300 font-medium">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          Live
+        </span>
         {board.description && (
           <span className="text-indigo-200 text-sm hidden md:block">— {board.description}</span>
         )}
